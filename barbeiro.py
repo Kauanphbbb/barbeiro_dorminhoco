@@ -1,108 +1,70 @@
-import threading
-import time
+from threading import Thread, Semaphore
+from time import sleep
 import random
 
-exitFlag = 0
 
-# fila de espera
-
-
-class queue (threading.Thread):
-    def __init__(self, q):
-        threading.Thread.__init__(self)
-        self.q = q
+class Barber(Thread):
+    def __init__(self, chairs, total_customers):
+        Thread.__init__(self)
+        self.mutex = Semaphore()
+        self.s_customers = Semaphore(0)
+        self.s_barber = Semaphore()
+        self.customers = []
+        self.chairs = chairs
+        self.customers_count = 0
+        self.total_customers = total_customers
 
     def run(self):
-        fillQ(self.q, 2)
+        print("Waiting clients")
+        while self.customers_count < self.total_customers:
+            self.s_customers.acquire()
+            self.mutex.acquire()
+            customer = self.customers.pop(0)
+            print(f"The customer {customer.name} sat in the chair.")
+            customer.cut_hair()
+            print(f"The customer {customer.name} left the chair.")
+            self.customers_count += 1
+            self.mutex.release()
+        print("Barber is closed")
 
-# barbeiro
+    def add_customer(self, customer):
+        if len(self.customers) < self.chairs:
+            print(f"Customer {customer.name} waiting his turn.")
+            self.customers.append(customer)
 
 
-class myThread (threading.Thread):
-    def __init__(self, threadID, name, q):
-        threading.Thread.__init__(self)
-        self.threadID = threadID
+class Customer(Thread):
+    def __init__(self, barber, name):
+        Thread.__init__(self)
+        self.mutex = Semaphore()
+        self.barber = barber
         self.name = name
-        self.q = q
 
     def run(self):
-        print(self.name + " chegou na barbearia")
-        barberGoToWork(self.name, self.q)
-
-# funcao do barbeuro
-
-
-def barberGoToWork(threadName, q):
-    while not exitFlag:
-        queueLock.acquire()
-
-        if len(workQueue) > 0:
-            data = q.pop()
-            queueLock.release()
-            print("%s cortando cabelo de %s" % (threadName, data))
-            time.sleep(random.randrange(3, 7))
-            print("%s cortou cabelo de %s" % (threadName, data))
+        sleep(random.randint(0, 5))
+        self.mutex.acquire()
+        if len(self.barber.customers) < self.barber.chairs:
+            self.barber.add_customer(self)
+            self.barber.s_customers.release()
+            self.mutex.release()
         else:
-            queueLock.release()
-            print('%s dormindo' % threadName)
-        time.sleep(1)
+            print(f"Barber is full. I'm going home ({self.name})")
+            self.mutex.release()
 
-# cotrola a chegada de clientes na fila
-
-
-def fillQ(q, delay):
-    while True:
-        wait = False
-
-        if len(nameList) == 0:
-            break
-        time.sleep(1)
-        queueLock.acquire()
-        if len(q) < 4:
-            c = nameList.pop()
-            workQueue.append(c)
-            print("cliente %s chegou na barbearia" % str(c))
-        else:
-            print("%s foi embora pq a fila esta cheia" % str(nameList[-1]))
-            wait = True
-        queueLock.release()
-
-        if wait:
-            time.sleep(delay*2)  # espera delay para poder voltar a barbearia
+    def cut_hair(self):
+        print(f"The customer {self.name} is cutting its hair.")
+        self.barber.s_barber.acquire()
+        sleep(5)
+        self.barber.s_barber.release()
 
 
-threadList = ["Barbeiro-1", "Barbeiro-2", "Barbeiro-3"]
-nameList = []
-queueLock = threading.Lock()
-workQueue = []
-threads = []
-threadID = 1
-
-tempoDeChegada = random.randrange(3, 10)
-
-# criando 50 clientes
-for x in range(50):
-    nameList.append(str(x))
-
-# Criando barbeiros
-for tName in threadList:
-    thread = myThread(threadID, tName, workQueue)
-    thread.start()
-    threads.append(thread)
-    threadID += 1
-
-# thread q controla clientes na fila
-qThread = queue(workQueue)
-qThread_.start()
-
-
-# saida do programa quando acabar os clientes
-while len(nameList) > 0:
-    pass
-
-exitFlag = 1
-
-# esperar quem esta cortando
-for t in threads:
-    t.join()
-print("Exiting Main Thread")
+if __name__ == "__main__":
+    barber = Barber(3, 10)
+    barber.start()
+    count = 0
+    while count < 50:
+        sleep(2)
+        customer = Customer(barber, f"Customers {count + 1}")
+        customer.start()
+        count += 1
+    barber.join()
